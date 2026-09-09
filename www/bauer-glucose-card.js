@@ -2,12 +2,14 @@
  * Bauer Glucose Card
  *
  * A Lovelace tile for a `bauer_glucose` sensor entity: big current-value
- * readout colored by range severity, trend arrow, and an inline history
- * graph rendered from the sensor's `history` attribute.
+ * readout colored by range severity, trend arrow, an inline history graph
+ * with insulin-dose markers, and quick buttons to log a new dose.
  *
  * YAML config:
  *   type: custom:bauer-glucose-card
  *   entity: sensor.bauers_glucose_monitor_glucose
+ *   dose_entity: sensor.bauers_glucose_monitor_last_insulin_dose  # optional,
+ *                                                                  # guessed from `entity` if omitted
  *   name: Bauer                 # optional, defaults to entity friendly name
  *   hours: 3                    # optional, how much history to graph (default 3)
  *   urgent_low: 60               # optional coloring overrides; falls back to
@@ -26,6 +28,9 @@ const COLORS = {
   urgent_high: "#c0392b",
   unknown: "#8a8f98",
 };
+
+const DOSE_COLORS = { long: "#3b82f6", short: "#f97316" };
+const DOSE_LABEL = { long: "L", short: "S" };
 
 function rangeColor(rangeState) {
   return COLORS[rangeState] || COLORS.unknown;
@@ -59,6 +64,14 @@ function relativeTime(isoString) {
   return `${hrs}h ${diffMin % 60}m ago`;
 }
 
+function guessDoseEntity(glucoseEntity) {
+  if (!glucoseEntity) return null;
+  if (glucoseEntity.includes("_glucose")) {
+    return glucoseEntity.replace(/_glucose(?!_rate)/, "_last_insulin_dose");
+  }
+  return null;
+}
+
 class BauerGlucoseCard extends HTMLElement {
   setConfig(config) {
     if (!config.entity) {
@@ -66,6 +79,7 @@ class BauerGlucoseCard extends HTMLElement {
     }
     this._config = config;
     this._thresholds = { ...DEFAULT_THRESHOLDS, ...config };
+    this._doseEntityId = config.dose_entity || guessDoseEntity(config.entity);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this._build();
@@ -83,7 +97,7 @@ class BauerGlucoseCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 4;
+    return 5;
   }
 
   static getStubConfig(hass) {
@@ -119,8 +133,29 @@ class BauerGlucoseCard extends HTMLElement {
         font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
         padding: 2px 8px; border-radius: 10px; color: white;
       }
-      canvas { display: block; width: 100%; height: 90px; }
+      canvas { display: block; width: 100%; height: 110px; }
+      .legend { display: flex; gap: 14px; font-size: 0.7rem; color: var(--secondary-text-color); margin: 2px 0 10px; }
+      .legend span { display: inline-flex; align-items: center; gap: 4px; }
+      .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
       .empty { color: var(--secondary-text-color); font-size: 0.85rem; padding: 8px 0; }
+      .dose-log {
+        display: flex; align-items: center; gap: 8px;
+        border-top: 1px solid var(--divider-color, #e0e0e0);
+        padding-top: 10px; cursor: default;
+      }
+      .dose-log input {
+        width: 56px; font-size: 0.9rem; padding: 4px 6px;
+        border: 1px solid var(--divider-color, #ccc); border-radius: 6px;
+        background: var(--card-background-color, #fff); color: var(--primary-text-color);
+      }
+      .dose-log button {
+        font-size: 0.78rem; font-weight: 600; border: none; border-radius: 14px;
+        padding: 6px 12px; cursor: pointer; color: white;
+      }
+      .dose-log button.long { background: ${DOSE_COLORS.long}; }
+      .dose-log button.short { background: ${DOSE_COLORS.short}; }
+      .dose-log button:active { filter: brightness(0.9); }
+      .dose-status { font-size: 0.75rem; color: var(--secondary-text-color); margin-left: auto; }
     `;
     this._card = document.createElement("ha-card");
     this._card.innerHTML = `
@@ -135,8 +170,24 @@ class BauerGlucoseCard extends HTMLElement {
         <span class="trend"></span>
       </div>
       <canvas></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:${DOSE_COLORS.long}"></i>Long-acting</span>
+        <span><i class="swatch" style="background:${DOSE_COLORS.short}"></i>Short-acting</span>
+      </div>
+      <div class="dose-log">
+        <input type="number" class="dose-units" step="0.25" min="0" value="0.5" inputmode="decimal" />
+        <button class="long">+ Long</button>
+        <button class="short">+ Short</button>
+        <span class="dose-status"></span>
+      </div>
     `;
     this._card.addEventListener("click", () => this._openMoreInfo());
+
+    const doseLog = this._card.querySelector(".dose-log");
+    doseLog.addEventListener("click", (e) => e.stopPropagation());
+    this._card.querySelector("button.long").addEventListener("click", () => this._logDose("long"));
+    this._card.querySelector("button.short").addEventListener("click", () => this._logDose("short"));
+
     this.shadowRoot.append(style, this._card);
   }
 
@@ -145,6 +196,35 @@ class BauerGlucoseCard extends HTMLElement {
     const event = new Event("hass-more-info", { bubbles: true, composed: true });
     event.detail = { entityId: this._config.entity };
     this.dispatchEvent(event);
+  }
+
+  async _logDose(insulinType) {
+    const statusEl = this._card.querySelector(".dose-status");
+    if (!this._doseEntityId || !this._hass.states[this._doseEntityId]) {
+      statusEl.textContent = "No dose sensor configured";
+      return;
+    }
+    const unitsInput = this._card.querySelector(".dose-units");
+    const units = parseFloat(unitsInput.value);
+    if (!Number.isFinite(units) || units <= 0) {
+      statusEl.textContent = "Enter units first";
+      return;
+    }
+    try {
+      await this._hass.callService("bauer_glucose", "log_dose", {
+        entity_id: this._doseEntityId,
+        insulin_type: insulinType,
+        units,
+      });
+      statusEl.textContent = `Logged ${units}u ${insulinType} ✓`;
+    } catch (err) {
+      statusEl.textContent = "Failed to log dose";
+    }
+    setTimeout(() => {
+      if (statusEl.textContent.startsWith("Logged") || statusEl.textContent === "Failed to log dose") {
+        statusEl.textContent = "";
+      }
+    }, 3000);
   }
 
   _renderMissing() {
@@ -192,7 +272,10 @@ class BauerGlucoseCard extends HTMLElement {
       badges.appendChild(this._badge("No recent data", "#6b7280"));
     }
 
-    this._drawGraph(attrs.history || []);
+    const doseState = this._doseEntityId ? this._hass.states[this._doseEntityId] : null;
+    const doses = doseState?.attributes?.doses || [];
+
+    this._drawGraph(attrs.history || [], doses);
   }
 
   _badge(text, bg) {
@@ -203,12 +286,13 @@ class BauerGlucoseCard extends HTMLElement {
     return el;
   }
 
-  _drawGraph(history) {
+  _drawGraph(history, doses) {
     const canvas = this._card.querySelector("canvas");
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const width = Math.max(rect.width, 200);
-    const height = 90;
+    const height = 110;
+    const topMargin = 16; // room for dose labels above the line
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     const ctx = canvas.getContext("2d");
@@ -233,13 +317,37 @@ class BauerGlucoseCard extends HTMLElement {
     const maxT = points[points.length - 1].t;
 
     const x = (t) => ((t - minT) / Math.max(maxT - minT, 1)) * (width - 4) + 2;
-    const y = (v) => height - ((v - minV) / Math.max(maxV - minV, 1)) * (height - 8) - 4;
+    const y = (v) =>
+      topMargin + (height - topMargin) - ((v - minV) / Math.max(maxV - minV, 1)) * (height - topMargin - 8) - 4;
 
     // Target-range band
     ctx.fillStyle = "rgba(47, 158, 94, 0.12)";
     ctx.fillRect(0, y(th.high), width, y(th.low) - y(th.high));
 
-    // Line
+    // Insulin dose markers, within the same time window
+    const doseMarkers = (doses || [])
+      .map((d) => ({ t: new Date(d.t).getTime(), type: d.type, units: d.units }))
+      .filter((d) => d.t >= minT && d.t <= maxT);
+    doseMarkers.forEach((d) => {
+      const px = x(d.t);
+      const markerColor = DOSE_COLORS[d.type] || "#999";
+      ctx.beginPath();
+      ctx.setLineDash([3, 2]);
+      ctx.strokeStyle = markerColor;
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(px, topMargin);
+      ctx.lineTo(px, height - 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = markerColor;
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "center";
+      const label = `${DOSE_LABEL[d.type] || "?"}${d.units}`;
+      ctx.fillText(label, px, topMargin - 4);
+    });
+
+    // Glucose line
     ctx.beginPath();
     points.forEach((p, i) => {
       const px = x(p.t);
@@ -267,5 +375,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "bauer-glucose-card",
   name: "Bauer Glucose Card",
-  description: "Current CGM reading, trend, and history graph for Bauer's glucose sensor.",
+  description: "Current CGM reading, trend, dose-correlated history graph, and quick dose logging.",
 });

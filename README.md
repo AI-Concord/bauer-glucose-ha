@@ -28,8 +28,16 @@ with your veterinarian.
   these to a TTS announcement on your speakers (e.g. Google Nest) and an
   optional mobile push.
 - **`bauer-glucose-card`** — a Lovelace tile: big colored number (green in
-  range, amber near the edges, red urgent), trend arrow, badges, and an
-  inline graph of recent readings.
+  range, amber near the edges, red urgent), trend arrow, badges, an inline
+  graph of recent readings with insulin-dose markers on it, and buttons to
+  log a new dose right from the tile.
+- **`sensor.<name>_last_insulin_dose`** — last logged dose (units), with the
+  full recent dose log (type, units, timestamp, note) as an attribute.
+  Persisted to disk independently of HA's recorder, so it isn't subject to
+  the recorder's history purge window.
+- **`bauer_glucose.log_dose`** service — records a long- or short-acting
+  dose (+ optional note). Callable from the card's buttons, an automation,
+  a script, or Developer Tools.
 
 ## Architecture
 
@@ -123,6 +131,39 @@ name: Bauer
 hours: 3
 ```
 
+The card guesses the dose-log entity from `entity` (swapping `_glucose` for
+`_last_insulin_dose`); if your entity ID doesn't follow that pattern, set it
+explicitly with `dose_entity: sensor.<your_dose_sensor>`.
+
+### Logging insulin doses
+
+Two buttons on the card ("+ Long" / "+ Short") log a dose for whatever
+units value is in the adjacent box, using the `bauer_glucose.log_dose`
+service. Logged doses show up immediately as dashed vertical markers on the
+graph (blue = long-acting, orange = short-acting/correction), so you can
+see the dose-response directly against a spike or drop — including whether
+a high/low happened *before* a dose (missed/late dose) or *after* one
+(overcorrection).
+
+You can also call the service directly — from Developer Tools → Actions, a
+script, or an automation (e.g. logging automatically if you dose via a
+smart pen or pump that exposes its own trigger):
+
+```yaml
+action: bauer_glucose.log_dose
+target:
+  entity_id: sensor.bauers_glucose_monitor_last_insulin_dose
+data:
+  insulin_type: long   # or "short"
+  units: 0.5
+  note: "belly distended, drinking a lot"   # optional, freeform
+```
+
+The `note` field is a good place to jot the symptoms you mentioned — excess
+thirst/distension around a dose — without needing a separate tracking
+system; it's stored with the dose and visible in that entity's `doses`
+attribute for later review.
+
 ### 4. Wire up announcements
 
 Import `blueprints/automation/bauer_glucose/announce_alert.yaml`
@@ -180,6 +221,11 @@ only the repeats while it persists.
   running the primary LibreLink app hasn't synced recently (Bluetooth range,
   app not running, phone off). LibreLinkUp only sees what the primary app
   has uploaded.
+- **Dose log looks empty after restart** — dose history lives in
+  `.storage/bauer_glucose_doses_<entry_id>` in your HA config directory, not
+  in the recorder DB. If it's missing, check that HA has write access to
+  `.storage/` and that the integration reloaded cleanly (Settings → System →
+  Logs).
 
 ## Disclaimer
 

@@ -48,13 +48,34 @@
   "entity": {
     "sensor": {
       "glucose": { "name": "Glucose" },
-      "glucose_rate": { "name": "Glucose rate of change" }
+      "glucose_rate": { "name": "Glucose rate of change" },
+      "last_insulin_dose": { "name": "Last insulin dose" }
     },
     "binary_sensor": {
       "rapid_change": { "name": "Rapid change" },
       "out_of_range": { "name": "Out of range" },
       "urgent_range": { "name": "Urgent range" },
       "stale_reading": { "name": "Stale reading" }
+    }
+  },
+  "services": {
+    "log_dose": {
+      "name": "Log insulin dose",
+      "description": "Record an insulin dose so it shows up as a marker on the glucose graph, for correlating dosing against spikes/drops.",
+      "fields": {
+        "insulin_type": {
+          "name": "Insulin type",
+          "description": "Which insulin this dose was."
+        },
+        "units": {
+          "name": "Units",
+          "description": "Dose size, in units."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Optional context, e.g. \"belly distended, drinking a lot\"."
+        }
+      }
     }
   }
 }

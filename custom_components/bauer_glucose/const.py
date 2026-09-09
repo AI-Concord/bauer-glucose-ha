@@ -83,9 +83,20 @@ SIGNAL_UPDATE = f"{DOMAIN}_update"
 
 EVENT_RAPID_CHANGE = f"{DOMAIN}_rapid_change"
 EVENT_URGENT_RANGE = f"{DOMAIN}_urgent_range"
+EVENT_DOSE_LOGGED = f"{DOMAIN}_dose_logged"
 
 ATTR_GLUCOSE_MGDL = "glucose_mgdl"
 ATTR_TREND = "trend"
 ATTR_RATE_MGDL_MIN = "rate_mgdl_per_min"
 ATTR_TIMESTAMP = "timestamp"
 ATTR_DIRECTION = "direction"  # "low" or "high", used on rapid-change event
+
+# --- Insulin dose logging ---
+SERVICE_LOG_DOSE = "log_dose"
+ATTR_INSULIN_TYPE = "insulin_type"
+ATTR_UNITS = "units"
+ATTR_NOTE = "note"
+INSULIN_TYPE_LONG = "long"
+INSULIN_TYPE_SHORT = "short"
+INSULIN_TYPES = [INSULIN_TYPE_LONG, INSULIN_TYPE_SHORT]
+MAX_STORED_DOSES = 500

@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .alerts import GlucoseStatus, evaluate
 from .api import GlucoseSnapshot, LibreLinkUpAuthError, LibreLinkUpClient, LibreLinkUpError
+from .dose_store import DoseStore
 from .const import (
     ATTR_DIRECTION,
     ATTR_GLUCOSE_MGDL,
@@ -50,6 +51,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
         self._patient_name = entry.data.get(CONF_PATIENT_NAME, "Bauer")
         self._logged_in = False
 
+        self.dose_store = DoseStore(hass, entry.entry_id)
         self.status: GlucoseStatus | None = None
         self._last_rapid_direction: str | None = None
         self._last_range_state: str | None = None

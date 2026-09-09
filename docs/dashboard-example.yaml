@@ -8,6 +8,7 @@ views:
     cards:
       - type: custom:bauer-glucose-card
         entity: sensor.bauers_glucose_monitor_glucose
+        dose_entity: sensor.bauers_glucose_monitor_last_insulin_dose
         name: Bauer
         hours: 3
 
@@ -25,3 +26,4 @@ views:
           - binary_sensor.bauers_glucose_monitor_out_of_range
           - binary_sensor.bauers_glucose_monitor_stale_reading
           - sensor.bauers_glucose_monitor_glucose_rate
+          - sensor.bauers_glucose_monitor_last_insulin_dose

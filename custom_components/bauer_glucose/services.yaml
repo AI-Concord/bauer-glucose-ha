@@ -1,0 +1,40 @@
+log_dose:
+  name: Log insulin dose
+  description: >-
+    Record an insulin dose so it shows up as a marker on the glucose graph,
+    for correlating dosing against spikes/drops.
+  target:
+    entity:
+      integration: bauer_glucose
+      domain: sensor
+  fields:
+    insulin_type:
+      name: Insulin type
+      description: Which insulin this dose was.
+      required: true
+      selector:
+        select:
+          options:
+            - label: Long-acting
+              value: long
+            - label: Short-acting / correction
+              value: short
+    units:
+      name: Units
+      description: Dose size, in units.
+      required: true
+      example: 0.5
+      selector:
+        number:
+          min: 0
+          max: 20
+          step: 0.25
+          mode: box
+    note:
+      name: Note
+      description: >-
+        Optional context, e.g. "belly distended, drinking a lot" — useful
+        later when reviewing what preceded a bad episode.
+      required: false
+      selector:
+        text:
