@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import aiohttp
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .alerts import GlucoseStatus, evaluate
@@ -42,7 +43,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
     def __init__(self, hass: HomeAssistant, entry) -> None:
         self._entry = entry
         self._client = LibreLinkUpClient(
-            session=hass.helpers.aiohttp_client.async_get_clientsession(),
+            session=async_get_clientsession(hass),
             email=entry.data[CONF_EMAIL],
             password=entry.data[CONF_PASSWORD],
             region=entry.data[CONF_REGION],
