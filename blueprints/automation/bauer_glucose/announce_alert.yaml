@@ -1,0 +1,97 @@
+blueprint:
+  name: Bauer Glucose – Announce & Notify Alert
+  description: >-
+    Announces over chosen speakers (e.g. Google Nest) and sends a mobile
+    notification when Bauer's glucose enters an urgent range or is changing
+    rapidly. Triggered by the `bauer_glucose_urgent_range` and
+    `bauer_glucose_rapid_change` events fired by the Bauer Glucose
+    integration. Re-announces periodically while the condition persists
+    (handled by the integration itself, roughly every 10 minutes) rather than
+    on every poll.
+  domain: automation
+  input:
+    announce_players:
+      name: Announcement speakers
+      description: Speakers to announce on (e.g. your Google Nest devices).
+      selector:
+        target:
+          entity:
+            domain: media_player
+    notify_targets:
+      name: Mobile notification targets
+      description: notify.* services to send a push notification to (optional).
+      default: []
+      selector:
+        entity:
+          domain: notify
+          multiple: true
+    react_to_urgent_range:
+      name: React to urgent low/high
+      default: true
+      selector:
+        boolean:
+    react_to_rapid_change:
+      name: React to rapid change
+      default: true
+      selector:
+        boolean:
+    tts_engine:
+      name: TTS entity/service
+      description: >-
+        A tts.* entity (e.g. tts.google_translate_en_com) used to speak the
+        announcement on the chosen media players.
+      selector:
+        entity:
+          domain: tts
+
+variables:
+  patient_name: "{{ trigger.event.data.patient_name }}"
+  glucose_mgdl: "{{ trigger.event.data.glucose_mgdl }}"
+  direction: "{{ trigger.event.data.direction }}"
+  event_kind: "{{ trigger.event.event_type }}"
+
+trigger:
+  - trigger: event
+    event_type: bauer_glucose_urgent_range
+    id: urgent_range
+  - trigger: event
+    event_type: bauer_glucose_rapid_change
+    id: rapid_change
+
+condition:
+  - condition: or
+    conditions:
+      - condition: and
+        conditions:
+          - "{{ trigger.id == 'urgent_range' }}"
+          - "{{ react_to_urgent_range }}"
+      - condition: and
+        conditions:
+          - "{{ trigger.id == 'rapid_change' }}"
+          - "{{ react_to_rapid_change }}"
+
+action:
+  - variables:
+      message: >-
+        {% if event_kind == 'bauer_glucose_urgent_range' %}
+          {{ patient_name }}'s insulin needs to be checked immediately.
+          Glucose is {{ 'critically low' if direction == 'low' else 'critically high' }}
+          at {{ glucose_mgdl | round(0) }} milligrams per deciliter.
+        {% else %}
+          {{ patient_name }}'s glucose is changing rapidly, currently
+          {{ 'dropping' if direction == 'low' else 'rising' }} fast at
+          {{ glucose_mgdl | round(0) }} milligrams per deciliter. Please check soon.
+        {% endif %}
+  - action: tts.speak
+    target:
+      entity_id: "{{ tts_engine }}"
+    data:
+      media_player_entity_id: "{{ announce_players.entity_id }}"
+      message: "{{ message }}"
+  - repeat:
+      for_each: "{{ notify_targets }}"
+      sequence:
+        - action: "notify.{{ repeat.item.split('.')[1] }}"
+          data:
+            title: "Bauer Glucose Alert"
+            message: "{{ message }}"

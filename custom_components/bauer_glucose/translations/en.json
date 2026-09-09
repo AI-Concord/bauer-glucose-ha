@@ -1,0 +1,58 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect LibreLinkUp",
+        "description": "Use a LibreLinkUp *follower* account (Settings → Sharing in the LibreLink/Libre 3 app on the primary account, invite yourself as a follower, then log in here with those credentials — not the primary account's password).",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "region": "Account region"
+        }
+      },
+      "patient": {
+        "title": "Choose patient",
+        "data": {
+          "patient_id": "Patient"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Could not log in — check the email/password, and make sure this is a LibreLinkUp follower account.",
+      "cannot_connect": "Could not reach LibreLinkUp.",
+      "no_connections": "This account has no shared patients yet — accept the follower invite in the LibreLinkUp app first."
+    },
+    "abort": {
+      "already_configured": "This patient is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Thresholds and polling",
+        "description": "Defaults are a starting point only — confirm target ranges with your vet.",
+        "data": {
+          "urgent_low_threshold": "Urgent low (mg/dL)",
+          "low_threshold": "Low (mg/dL)",
+          "high_threshold": "High (mg/dL)",
+          "urgent_high_threshold": "Urgent high (mg/dL)",
+          "rapid_change_rate": "Rapid change rate (mg/dL per minute)",
+          "stale_minutes": "Stale after (minutes)",
+          "scan_interval": "Poll interval (seconds, min 60)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "glucose": { "name": "Glucose" },
+      "glucose_rate": { "name": "Glucose rate of change" }
+    },
+    "binary_sensor": {
+      "rapid_change": { "name": "Rapid change" },
+      "out_of_range": { "name": "Out of range" },
+      "urgent_range": { "name": "Urgent range" },
+      "stale_reading": { "name": "Stale reading" }
+    }
+  }
+}

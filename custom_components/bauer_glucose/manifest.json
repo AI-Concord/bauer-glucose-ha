@@ -1,0 +1,11 @@
+{
+  "domain": "bauer_glucose",
+  "name": "Bauer Glucose (LibreLinkUp)",
+  "codeowners": ["@nickbehnken"],
+  "config_flow": true,
+  "documentation": "https://github.com/AI-Concord/bauer-glucose-ha",
+  "issue_tracker": "https://github.com/AI-Concord/bauer-glucose-ha/issues",
+  "iot_class": "cloud_polling",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "0.1.0"
+}

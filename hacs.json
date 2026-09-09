@@ -1,0 +1,7 @@
+{
+  "name": "Bauer Glucose (LibreLinkUp)",
+  "render_readme": true,
+  "content_in_root": false,
+  "filename": "bauer_glucose.zip",
+  "homeassistant": "2024.6.0"
+}

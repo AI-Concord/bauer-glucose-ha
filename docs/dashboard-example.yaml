@@ -1,0 +1,27 @@
+# Example Lovelace view. Replace the entity id with your actual sensor,
+# e.g. sensor.bauers_glucose_monitor_glucose (check Settings > Devices &
+# Services > Bauer Glucose > entities after setup).
+title: Bauer
+views:
+  - title: Bauer
+    icon: mdi:paw
+    cards:
+      - type: custom:bauer-glucose-card
+        entity: sensor.bauers_glucose_monitor_glucose
+        name: Bauer
+        hours: 3
+
+      - type: history-graph
+        title: Last 24 hours
+        hours_to_show: 24
+        entities:
+          - entity: sensor.bauers_glucose_monitor_glucose
+
+      - type: entities
+        title: Status
+        entities:
+          - binary_sensor.bauers_glucose_monitor_urgent_range
+          - binary_sensor.bauers_glucose_monitor_rapid_change
+          - binary_sensor.bauers_glucose_monitor_out_of_range
+          - binary_sensor.bauers_glucose_monitor_stale_reading
+          - sensor.bauers_glucose_monitor_glucose_rate
