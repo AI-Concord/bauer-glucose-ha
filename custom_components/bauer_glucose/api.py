@@ -1,11 +1,14 @@
 """Thin async client for the (unofficial) LibreLinkUp follower API.
 
 Endpoint paths, headers and response field names verified against the
-LibreLinkUp app protocol as of 2026 (mirrors smpurkis/libre-linkup-py and
-DiaKEM/libre-link-up-api-client, the two actively-maintained reference
-clients for this API). Abbott has no public/official API for this — expect
-the `version` header to need bumping again in the future if requests start
-failing wholesale; that's the single most common breakage point.
+LibreLinkUp app protocol as of 2026 (mirrors timoschlueter/nightscout-
+librelink-up, the actively-maintained reference for this API). Abbott has
+no public/official API for this — expect the exact header fingerprint
+(product/User-Agent/Content-Type) to need chasing again in the future if
+requests start returning HTTP 430 with an empty body: that status is an
+edge/WAF-level rejection of the header combination, not a credentials or
+version problem. The Android product string + a generic Android UA is
+known to trigger it; the iOS fingerprint below is what's currently accepted.
 """
 from __future__ import annotations
 
@@ -21,10 +24,10 @@ from .const import REGION_HOSTS, TREND_ARROW_MAP
 _LOGGER = logging.getLogger(__name__)
 
 LLU_VERSION = "4.16.0"
-LLU_PRODUCT = "llu.android"
+LLU_PRODUCT = "llu.ios"
 LLU_USER_AGENT = (
-    "Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36"
+    "Mozilla/5.0 (iPhone; CPU OS 17_4.1 like Mac OS X) AppleWebKit/536.26 "
+    "(KHTML, like Gecko) Version/17.4.1 Mobile/10A5355d Safari/8536.25"
 )
 
 _TIMESTAMP_FORMAT = "%m/%d/%Y %I:%M:%S %p"
@@ -91,7 +94,7 @@ class LibreLinkUpClient:
             "accept-encoding": "gzip",
             "cache-control": "no-cache",
             "connection": "Keep-Alive",
-            "content-type": "application/json",
+            "content-type": "application/json;charset=UTF-8",
             "accept": "application/json",
             "user-agent": LLU_USER_AGENT,
         }
