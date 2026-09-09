@@ -38,7 +38,9 @@
           "urgent_high_threshold": "Urgent high (mg/dL)",
           "rapid_change_rate": "Rapid change rate (mg/dL per minute)",
           "stale_minutes": "Stale after (minutes)",
-          "scan_interval": "Poll interval (seconds, min 60)"
+          "scan_interval": "Poll interval (seconds, min 60)",
+          "low_alert_repeat_minutes": "Re-announce while low (every N minutes)",
+          "high_alert_repeat_minutes": "Re-announce while high (every N minutes)"
         }
       }
     }

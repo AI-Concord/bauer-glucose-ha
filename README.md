@@ -154,9 +154,17 @@ Defaults (`const.py`) are ballpark figures, **not** vet guidance:
 | Urgent high | 350 mg/dL |
 | Rapid change | 4 mg/dL/min sustained |
 | Stale after | 20 minutes |
+| Re-announce while low | every 10 min |
+| Re-announce while high | every 10 min |
 
 Change these in the integration's Options after setup to match your vet's
-actual target range for Bauer.
+actual target range for Bauer. The last two are sliders (1–60 min) that
+control how often the `bauer_glucose_urgent_range` / `bauer_glucose_rapid_change`
+events re-fire while a low or high episode is still ongoing — set them
+independently, e.g. a shorter interval for lows than highs if a fast drop
+worries you more than a slow climb. They don't affect the first
+announcement, which always fires immediately on entering the condition —
+only the repeats while it persists.
 
 ## Troubleshooting
 

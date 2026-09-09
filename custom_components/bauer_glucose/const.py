@@ -21,6 +21,8 @@ CONF_URGENT_HIGH_THRESHOLD = "urgent_high_threshold"
 CONF_RAPID_CHANGE_RATE = "rapid_change_rate"  # mg/dL per minute
 CONF_STALE_MINUTES = "stale_minutes"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_LOW_ALERT_REPEAT_MINUTES = "low_alert_repeat_minutes"
+CONF_HIGH_ALERT_REPEAT_MINUTES = "high_alert_repeat_minutes"
 
 # Defaults are ballpark figures for a diabetic cat and MUST be confirmed with
 # a veterinarian before being relied on for dosing decisions. They exist so
@@ -32,8 +34,12 @@ DEFAULT_URGENT_HIGH_THRESHOLD = 350  # mg/dL
 DEFAULT_RAPID_CHANGE_RATE = 4  # mg/dL per minute sustained
 DEFAULT_STALE_MINUTES = 20  # no new reading in this long -> sensor data considered stale
 DEFAULT_SCAN_INTERVAL = 60  # seconds; LibreLinkUp/sensor data itself only updates ~every 60s
+DEFAULT_LOW_ALERT_REPEAT_MINUTES = 10  # how often to re-announce/re-fire while low/urgent-low persists
+DEFAULT_HIGH_ALERT_REPEAT_MINUTES = 10  # same, while high/urgent-high persists
 
 MIN_SCAN_INTERVAL = 60  # LibreLinkUp will start rejecting/throttling faster polling
+MIN_ALERT_REPEAT_MINUTES = 1
+MAX_ALERT_REPEAT_MINUTES = 60
 
 SCAN_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 

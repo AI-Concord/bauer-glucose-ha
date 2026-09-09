@@ -8,7 +8,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .alerts import RANGE_IN_RANGE, RANGE_UNKNOWN, GlucoseStatus, evaluate
+from .alerts import GlucoseStatus, evaluate
 from .api import GlucoseSnapshot, LibreLinkUpAuthError, LibreLinkUpClient, LibreLinkUpError
 from .const import (
     ATTR_DIRECTION,
@@ -17,11 +17,15 @@ from .const import (
     ATTR_TIMESTAMP,
     ATTR_TREND,
     CONF_EMAIL,
+    CONF_HIGH_ALERT_REPEAT_MINUTES,
+    CONF_LOW_ALERT_REPEAT_MINUTES,
     CONF_PASSWORD,
     CONF_PATIENT_ID,
     CONF_PATIENT_NAME,
     CONF_REGION,
     CONF_SCAN_INTERVAL,
+    DEFAULT_HIGH_ALERT_REPEAT_MINUTES,
+    DEFAULT_LOW_ALERT_REPEAT_MINUTES,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     EVENT_RAPID_CHANGE,
@@ -29,11 +33,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-# While an urgent condition (rapid change or urgent-range) persists, re-fire
-# the event this often so automations can re-announce "still needs checking"
-# rather than announcing once and going silent.
-ALERT_REPEAT_INTERVAL = timedelta(minutes=10)
 
 
 class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
@@ -89,15 +88,31 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
         self._fire_alert_events()
         return snapshot
 
-    def _should_fire(self, key: str, now: datetime) -> bool:
+    def _repeat_interval(self, direction: str | None) -> timedelta:
+        """Low/high each get their own configurable re-announce cadence."""
+        options = self._entry.options
+        if direction == "low":
+            minutes = options.get(CONF_LOW_ALERT_REPEAT_MINUTES, DEFAULT_LOW_ALERT_REPEAT_MINUTES)
+        else:
+            minutes = options.get(CONF_HIGH_ALERT_REPEAT_MINUTES, DEFAULT_HIGH_ALERT_REPEAT_MINUTES)
+        return timedelta(minutes=minutes)
+
+    def _should_fire(self, key: str, now: datetime, direction: str | None) -> bool:
         last = self._last_alert_fired_at.get(key)
-        if last is None or (now - last) >= ALERT_REPEAT_INTERVAL:
+        if last is None or (now - last) >= self._repeat_interval(direction):
             self._last_alert_fired_at[key] = now
             return True
         return False
 
     def _fire_alert_events(self) -> None:
-        """Edge-triggered on entry, then repeated periodically while it persists."""
+        """Edge-triggered on entry, then repeated periodically while it persists.
+
+        The repeat cadence is direction-specific (a separate slider each for
+        "low" and "high" in the integration's Options), so a keyed
+        last-fired timestamp is tracked per direction, not just per event
+        type — otherwise switching direction mid-episode would inherit the
+        wrong interval's clock.
+        """
         status = self.status
         if status is None or status.timestamp is None:
             return
@@ -105,7 +120,8 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
 
         if status.is_rapid_change:
             is_new = status.rapid_direction != self._last_rapid_direction
-            if is_new or self._should_fire("rapid_change", now):
+            fire_key = f"rapid_change_{status.rapid_direction}"
+            if is_new or self._should_fire(fire_key, now, status.rapid_direction):
                 self.hass.bus.async_fire(
                     EVENT_RAPID_CHANGE,
                     {
@@ -122,14 +138,16 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
 
         urgent = status.range_state in ("urgent_low", "urgent_high")
         if urgent:
+            urgent_direction = "low" if status.range_state == "urgent_low" else "high"
             is_new = status.range_state != self._last_range_state
-            if is_new or self._should_fire("urgent_range", now):
+            fire_key = f"urgent_range_{urgent_direction}"
+            if is_new or self._should_fire(fire_key, now, urgent_direction):
                 self.hass.bus.async_fire(
                     EVENT_URGENT_RANGE,
                     {
                         "patient_name": self._patient_name,
                         "range_state": status.range_state,
-                        ATTR_DIRECTION: "low" if status.range_state == "urgent_low" else "high",
+                        ATTR_DIRECTION: urgent_direction,
                         ATTR_GLUCOSE_MGDL: status.mgdl,
                         ATTR_TREND: status.trend,
                         ATTR_TIMESTAMP: status.timestamp.isoformat(),

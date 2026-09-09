@@ -8,12 +8,15 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import LibreLinkUpAuthError, LibreLinkUpClient, LibreLinkUpError
 from .const import (
     CONF_EMAIL,
+    CONF_HIGH_ALERT_REPEAT_MINUTES,
     CONF_HIGH_THRESHOLD,
+    CONF_LOW_ALERT_REPEAT_MINUTES,
     CONF_LOW_THRESHOLD,
     CONF_PASSWORD,
     CONF_PATIENT_ID,
@@ -24,7 +27,9 @@ from .const import (
     CONF_STALE_MINUTES,
     CONF_URGENT_HIGH_THRESHOLD,
     CONF_URGENT_LOW_THRESHOLD,
+    DEFAULT_HIGH_ALERT_REPEAT_MINUTES,
     DEFAULT_HIGH_THRESHOLD,
+    DEFAULT_LOW_ALERT_REPEAT_MINUTES,
     DEFAULT_LOW_THRESHOLD,
     DEFAULT_RAPID_CHANGE_RATE,
     DEFAULT_REGION,
@@ -33,6 +38,8 @@ from .const import (
     DEFAULT_URGENT_HIGH_THRESHOLD,
     DEFAULT_URGENT_LOW_THRESHOLD,
     DOMAIN,
+    MAX_ALERT_REPEAT_MINUTES,
+    MIN_ALERT_REPEAT_MINUTES,
     MIN_SCAN_INTERVAL,
     REGION_HOSTS,
 )
@@ -164,6 +171,30 @@ class BauerGlucoseOptionsFlow(config_entries.OptionsFlow):
                 vol.Required(
                     CONF_SCAN_INTERVAL, default=opts.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
                 ): vol.Coerce(int),
+                vol.Required(
+                    CONF_LOW_ALERT_REPEAT_MINUTES,
+                    default=opts.get(CONF_LOW_ALERT_REPEAT_MINUTES, DEFAULT_LOW_ALERT_REPEAT_MINUTES),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=MIN_ALERT_REPEAT_MINUTES,
+                        max=MAX_ALERT_REPEAT_MINUTES,
+                        step=1,
+                        mode=selector.NumberSelectorMode.SLIDER,
+                        unit_of_measurement="min",
+                    )
+                ),
+                vol.Required(
+                    CONF_HIGH_ALERT_REPEAT_MINUTES,
+                    default=opts.get(CONF_HIGH_ALERT_REPEAT_MINUTES, DEFAULT_HIGH_ALERT_REPEAT_MINUTES),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=MIN_ALERT_REPEAT_MINUTES,
+                        max=MAX_ALERT_REPEAT_MINUTES,
+                        step=1,
+                        mode=selector.NumberSelectorMode.SLIDER,
+                        unit_of_measurement="min",
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
