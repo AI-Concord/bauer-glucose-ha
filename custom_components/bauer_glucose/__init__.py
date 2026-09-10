@@ -13,6 +13,7 @@ from .const import (
     ATTR_NOTE,
     ATTR_UNITS,
     DOMAIN,
+    INSULIN_TYPE_SHORT,
     INSULIN_TYPES,
     PLATFORMS,
     SERVICE_LOG_DOSE,
@@ -75,11 +76,17 @@ def _async_register_services(hass: HomeAssistant) -> None:
             coordinator: BauerGlucoseCoordinator | None = hass.data.get(DOMAIN, {}).get(entry_id)
             if coordinator is None:
                 continue
+            insulin_type = call.data[ATTR_INSULIN_TYPE]
             await coordinator.dose_store.async_add_dose(
-                insulin_type=call.data[ATTR_INSULIN_TYPE],
+                insulin_type=insulin_type,
                 units=call.data[ATTR_UNITS],
                 note=call.data.get(ATTR_NOTE),
             )
+            if insulin_type == INSULIN_TYPE_SHORT:
+                # Only a correction dose implies "we're already treating the
+                # high" — a routine long-acting/basal dose isn't a response
+                # to a spike, so it shouldn't quiet high-side announcements.
+                coordinator.snooze_high_alerts()
             coordinator.async_update_listeners()
 
     hass.services.async_register(

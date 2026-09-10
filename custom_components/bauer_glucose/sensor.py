@@ -151,10 +151,12 @@ class LastInsulinDoseSensor(CoordinatorEntity[BauerGlucoseCoordinator], SensorEn
     def extra_state_attributes(self) -> dict:
         last = self.coordinator.dose_store.last_dose
         recent = sorted(self.coordinator.dose_store.doses, key=lambda d: d.timestamp)[-MAX_DOSE_POINTS:]
+        snooze_until = self.coordinator.high_snooze_until
         return {
             "insulin_type": last.insulin_type if last else None,
             "note": last.note if last else None,
             ATTR_TIMESTAMP: last.timestamp.isoformat() if last else None,
+            "high_alert_snoozed_until": snooze_until.isoformat() if snooze_until else None,
             "doses": [
                 {"t": d.timestamp.isoformat(), "type": d.insulin_type, "units": d.units, "note": d.note}
                 for d in recent

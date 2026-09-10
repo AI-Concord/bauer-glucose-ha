@@ -23,6 +23,7 @@ CONF_STALE_MINUTES = "stale_minutes"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_LOW_ALERT_REPEAT_MINUTES = "low_alert_repeat_minutes"
 CONF_HIGH_ALERT_REPEAT_MINUTES = "high_alert_repeat_minutes"
+CONF_DOSE_SNOOZE_MINUTES = "dose_snooze_minutes"
 
 # Defaults are ballpark figures for a diabetic cat and MUST be confirmed with
 # a veterinarian before being relied on for dosing decisions. They exist so
@@ -36,10 +37,13 @@ DEFAULT_STALE_MINUTES = 20  # no new reading in this long -> sensor data conside
 DEFAULT_SCAN_INTERVAL = 60  # seconds; LibreLinkUp/sensor data itself only updates ~every 60s
 DEFAULT_LOW_ALERT_REPEAT_MINUTES = 10  # how often to re-announce/re-fire while low/urgent-low persists
 DEFAULT_HIGH_ALERT_REPEAT_MINUTES = 10  # same, while high/urgent-high persists
+DEFAULT_DOSE_SNOOZE_MINUTES = 20  # how long a short-acting dose holds off repeat HIGH alerts
 
 MIN_SCAN_INTERVAL = 60  # LibreLinkUp will start rejecting/throttling faster polling
 MIN_ALERT_REPEAT_MINUTES = 1
 MAX_ALERT_REPEAT_MINUTES = 60
+MIN_DOSE_SNOOZE_MINUTES = 0  # 0 disables snoozing
+MAX_DOSE_SNOOZE_MINUTES = 60
 
 SCAN_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 

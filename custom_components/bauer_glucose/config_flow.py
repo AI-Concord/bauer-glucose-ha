@@ -13,6 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import LibreLinkUpAuthError, LibreLinkUpClient, LibreLinkUpError
 from .const import (
+    CONF_DOSE_SNOOZE_MINUTES,
     CONF_EMAIL,
     CONF_HIGH_ALERT_REPEAT_MINUTES,
     CONF_HIGH_THRESHOLD,
@@ -27,6 +28,7 @@ from .const import (
     CONF_STALE_MINUTES,
     CONF_URGENT_HIGH_THRESHOLD,
     CONF_URGENT_LOW_THRESHOLD,
+    DEFAULT_DOSE_SNOOZE_MINUTES,
     DEFAULT_HIGH_ALERT_REPEAT_MINUTES,
     DEFAULT_HIGH_THRESHOLD,
     DEFAULT_LOW_ALERT_REPEAT_MINUTES,
@@ -39,7 +41,9 @@ from .const import (
     DEFAULT_URGENT_LOW_THRESHOLD,
     DOMAIN,
     MAX_ALERT_REPEAT_MINUTES,
+    MAX_DOSE_SNOOZE_MINUTES,
     MIN_ALERT_REPEAT_MINUTES,
+    MIN_DOSE_SNOOZE_MINUTES,
     MIN_SCAN_INTERVAL,
     REGION_HOSTS,
 )
@@ -190,6 +194,18 @@ class BauerGlucoseOptionsFlow(config_entries.OptionsFlow):
                     selector.NumberSelectorConfig(
                         min=MIN_ALERT_REPEAT_MINUTES,
                         max=MAX_ALERT_REPEAT_MINUTES,
+                        step=1,
+                        mode=selector.NumberSelectorMode.SLIDER,
+                        unit_of_measurement="min",
+                    )
+                ),
+                vol.Required(
+                    CONF_DOSE_SNOOZE_MINUTES,
+                    default=opts.get(CONF_DOSE_SNOOZE_MINUTES, DEFAULT_DOSE_SNOOZE_MINUTES),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=MIN_DOSE_SNOOZE_MINUTES,
+                        max=MAX_DOSE_SNOOZE_MINUTES,
                         step=1,
                         mode=selector.NumberSelectorMode.SLIDER,
                         unit_of_measurement="min",

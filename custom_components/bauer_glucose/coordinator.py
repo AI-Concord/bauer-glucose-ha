@@ -18,6 +18,7 @@ from .const import (
     ATTR_RATE_MGDL_MIN,
     ATTR_TIMESTAMP,
     ATTR_TREND,
+    CONF_DOSE_SNOOZE_MINUTES,
     CONF_EMAIL,
     CONF_HIGH_ALERT_REPEAT_MINUTES,
     CONF_LOW_ALERT_REPEAT_MINUTES,
@@ -26,6 +27,7 @@ from .const import (
     CONF_PATIENT_NAME,
     CONF_REGION,
     CONF_SCAN_INTERVAL,
+    DEFAULT_DOSE_SNOOZE_MINUTES,
     DEFAULT_HIGH_ALERT_REPEAT_MINUTES,
     DEFAULT_LOW_ALERT_REPEAT_MINUTES,
     DEFAULT_SCAN_INTERVAL,
@@ -57,6 +59,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
         self._last_rapid_direction: str | None = None
         self._last_range_state: str | None = None
         self._last_alert_fired_at: dict[str, datetime] = {}
+        self._high_snooze_until: datetime | None = None
 
         scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         super().__init__(
@@ -69,6 +72,27 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
     @property
     def client(self) -> LibreLinkUpClient:
         return self._client
+
+    @property
+    def high_snooze_until(self) -> datetime | None:
+        return self._high_snooze_until
+
+    def snooze_high_alerts(self) -> None:
+        """Hold off repeat HIGH-direction announcements after a correction dose.
+
+        Only ever suppresses *repeats* of an already-announced HIGH episode —
+        never the first announcement, never anything on the LOW side (you
+        don't dose insulin for a low), and never a fresh escalation (a new
+        rapid-change or range episode is edge-triggered and bypasses this).
+        """
+        minutes = self._entry.options.get(CONF_DOSE_SNOOZE_MINUTES, DEFAULT_DOSE_SNOOZE_MINUTES)
+        if minutes <= 0:
+            self._high_snooze_until = None
+            return
+        self._high_snooze_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+    def _is_high_snoozed(self, now: datetime) -> bool:
+        return self._high_snooze_until is not None and now < self._high_snooze_until
 
     async def _async_update_data(self) -> GlucoseSnapshot:
         try:
@@ -124,7 +148,8 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
         if status.is_rapid_change:
             is_new = status.rapid_direction != self._last_rapid_direction
             fire_key = f"rapid_change_{status.rapid_direction}"
-            if is_new or self._should_fire(fire_key, now, status.rapid_direction):
+            snoozed = status.rapid_direction == "high" and not is_new and self._is_high_snoozed(now)
+            if not snoozed and (is_new or self._should_fire(fire_key, now, status.rapid_direction)):
                 self.hass.bus.async_fire(
                     EVENT_RAPID_CHANGE,
                     {
@@ -144,7 +169,8 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
             urgent_direction = "low" if status.range_state == "urgent_low" else "high"
             is_new = status.range_state != self._last_range_state
             fire_key = f"urgent_range_{urgent_direction}"
-            if is_new or self._should_fire(fire_key, now, urgent_direction):
+            snoozed = urgent_direction == "high" and not is_new and self._is_high_snoozed(now)
+            if not snoozed and (is_new or self._should_fire(fire_key, now, urgent_direction)):
                 self.hass.bus.async_fire(
                     EVENT_URGENT_RANGE,
                     {
