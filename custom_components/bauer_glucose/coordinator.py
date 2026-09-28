@@ -51,7 +51,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
             region=entry.data[CONF_REGION],
         )
         self._patient_id = entry.data[CONF_PATIENT_ID]
-        self._patient_name = entry.data.get(CONF_PATIENT_NAME, "Bauer")
+        self._patient_name = entry.options.get(CONF_PATIENT_NAME, entry.data.get(CONF_PATIENT_NAME, "Bauer"))
         self._logged_in = False
 
         self.dose_store = DoseStore(hass, entry.entry_id)

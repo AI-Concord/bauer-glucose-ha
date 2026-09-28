@@ -32,6 +32,7 @@
         "title": "Thresholds and polling",
         "description": "Defaults are a starting point only — confirm target ranges with your vet.",
         "data": {
+          "patient_name": "Patient display name (used in entity names and spoken alerts)",
           "urgent_low_threshold": "Urgent low (mg/dL)",
           "low_threshold": "Low (mg/dL)",
           "high_threshold": "High (mg/dL)",

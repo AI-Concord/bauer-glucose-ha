@@ -152,6 +152,13 @@ class BauerGlucoseOptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(
+                    CONF_PATIENT_NAME,
+                    default=opts.get(
+                        CONF_PATIENT_NAME,
+                        self._config_entry.data.get(CONF_PATIENT_NAME, "Bauer"),
+                    ),
+                ): str,
+                vol.Required(
                     CONF_URGENT_LOW_THRESHOLD,
                     default=opts.get(CONF_URGENT_LOW_THRESHOLD, DEFAULT_URGENT_LOW_THRESHOLD),
                 ): vol.Coerce(float),
