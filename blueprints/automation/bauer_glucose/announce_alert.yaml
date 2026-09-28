@@ -49,6 +49,7 @@ variables:
   glucose_mgdl: "{{ trigger.event.data.glucose_mgdl }}"
   direction: "{{ trigger.event.data.direction }}"
   event_kind: "{{ trigger.event.event_type }}"
+  capped: "{{ trigger.event.data.capped | default(none, true) }}"
   react_to_urgent_range: !input react_to_urgent_range
   react_to_rapid_change: !input react_to_rapid_change
   announce_players: !input announce_players
@@ -77,15 +78,17 @@ condition:
 
 action:
   - variables:
+      value_text: >-
+        {% if capped == 'high' %}{{ glucose_mgdl | round(0) }} or higher, the top of the meter's range, so the real value is unknown{% elif capped == 'low' %}{{ glucose_mgdl | round(0) }} or lower, the bottom of the meter's range, so the real value is unknown{% else %}{{ glucose_mgdl | round(0) }}{% endif %}
       message: >-
         {% if event_kind == 'bauer_glucose_urgent_range' %}
           {{ patient_name }}'s insulin needs to be checked immediately.
           Glucose is {{ 'critically low' if direction == 'low' else 'critically high' }}
-          at {{ glucose_mgdl | round(0) }} milligrams per deciliter.
+          at {{ value_text }} milligrams per deciliter.
         {% else %}
           {{ patient_name }}'s glucose is changing rapidly, currently
           {{ 'dropping' if direction == 'low' else 'rising' }} fast at
-          {{ glucose_mgdl | round(0) }} milligrams per deciliter. Please check soon.
+          {{ value_text }} milligrams per deciliter. Please check soon.
         {% endif %}
   - action: tts.speak
     target:

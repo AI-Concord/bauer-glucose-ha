@@ -20,6 +20,13 @@ with your veterinarian.
   instead of repeating the last value, so history graphs show a gap rather
   than a flat line; the card shades the missing stretch, and any readings the
   meter backfills later fill in on the card's graph.
+  The Libre 3 can't read outside 40-400 mg/dL, so a value at either limit
+  means "at least 400" / "at most 40", not an exact number. The sensor keeps
+  the limit value (thresholds still work) but sets a `capped` attribute
+  (`high`/`low`); rate of change is only a lower bound when it touches a
+  capped reading (`rate_is_minimum`) and is `unknown` when two consecutive
+  readings are both capped. The card shows "400+", marks capped bars, and
+  the spoken/push alerts say "400 or higher" rather than a false exact value.
 - **`sensor.<name>_glucose_rate`** — rate of change in mg/dL/min (also
   `unknown` while stale).
 - **`binary_sensor.<name>_rapid_change`** — on when glucose is moving faster

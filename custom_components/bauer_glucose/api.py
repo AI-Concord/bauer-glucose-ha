@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from .const import REGION_HOSTS, TREND_ARROW_MAP
+from .const import REGION_HOSTS, SENSOR_MAX_MGDL, SENSOR_MIN_MGDL, TREND_ARROW_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,9 @@ class GlucoseReading:
     mgdl: float
     timestamp: datetime
     trend: str  # one of TREND_ARROW_MAP values, or "stable" if not computable
+    # "high"/"low" when the value is pinned at the meter's measuring limit,
+    # i.e. the true value is at least/at most this number.
+    capped: str | None = None
 
 
 @dataclass
@@ -69,10 +72,17 @@ def _parse_factory_timestamp(raw: str) -> datetime:
 def _reading_from_glucose_item(item: dict) -> GlucoseReading:
     trend_num = item.get("TrendArrow") or 0
     trend = TREND_ARROW_MAP.get(trend_num, "stable")
+    mgdl = float(item["ValueInMgPerDl"])
+    capped = None
+    if mgdl >= SENSOR_MAX_MGDL or item.get("isHigh"):
+        capped = "high"
+    elif mgdl <= SENSOR_MIN_MGDL or item.get("isLow"):
+        capped = "low"
     return GlucoseReading(
-        mgdl=float(item["ValueInMgPerDl"]),
+        mgdl=mgdl,
         timestamp=_parse_factory_timestamp(item["FactoryTimestamp"]),
         trend=trend,
+        capped=capped,
     )
 
 

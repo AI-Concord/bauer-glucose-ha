@@ -13,6 +13,7 @@ from .alerts import GlucoseStatus, evaluate
 from .api import GlucoseSnapshot, LibreLinkUpAuthError, LibreLinkUpClient, LibreLinkUpError
 from .dose_store import DoseStore
 from .const import (
+    ATTR_CAPPED,
     ATTR_DIRECTION,
     ATTR_GLUCOSE_MGDL,
     ATTR_RATE_MGDL_MIN,
@@ -162,6 +163,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
                         "patient_name": self._patient_name,
                         ATTR_DIRECTION: status.rapid_direction,
                         ATTR_GLUCOSE_MGDL: status.mgdl,
+                        ATTR_CAPPED: status.capped,
                         ATTR_RATE_MGDL_MIN: status.rate_mgdl_per_min,
                         ATTR_TREND: status.trend,
                         ATTR_TIMESTAMP: status.timestamp.isoformat(),
@@ -184,6 +186,7 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
                         "range_state": status.range_state,
                         ATTR_DIRECTION: urgent_direction,
                         ATTR_GLUCOSE_MGDL: status.mgdl,
+                        ATTR_CAPPED: status.capped,
                         ATTR_TREND: status.trend,
                         ATTR_TIMESTAMP: status.timestamp.isoformat(),
                         "is_new": is_new,

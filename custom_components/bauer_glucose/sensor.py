@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    ATTR_CAPPED,
     ATTR_DIRECTION,
     ATTR_RATE_MGDL_MIN,
     ATTR_TIMESTAMP,
@@ -98,6 +99,8 @@ class GlucoseSensor(CoordinatorEntity[BauerGlucoseCoordinator], SensorEntity):
             ATTR_TIMESTAMP: status.timestamp.isoformat() if status.timestamp else None,
             "range_state": status.range_state,
             "is_stale": status.is_stale,
+            ATTR_CAPPED: status.capped,
+            "rate_is_minimum": status.rate_is_minimum,
             "is_rapid_change": status.is_rapid_change,
             ATTR_DIRECTION: status.rapid_direction,
             "history": [

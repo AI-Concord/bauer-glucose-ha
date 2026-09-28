@@ -94,6 +94,12 @@ ATTR_TREND = "trend"
 ATTR_RATE_MGDL_MIN = "rate_mgdl_per_min"
 ATTR_TIMESTAMP = "timestamp"
 ATTR_DIRECTION = "direction"  # "low" or "high", used on rapid-change event
+ATTR_CAPPED = "capped"  # "high"/"low" when the reading is pinned at the meter's limit
+
+# The sensor can't report beyond its measuring range (Libre 3: 40-400 mg/dL),
+# so a value at the limit means "at least"/"at most", not an exact number.
+SENSOR_MAX_MGDL = 400
+SENSOR_MIN_MGDL = 40
 
 # --- Insulin dose logging ---
 SERVICE_LOG_DOSE = "log_dose"

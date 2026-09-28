@@ -42,6 +42,11 @@ class GlucoseStatus:
     is_rapid_change: bool
     rapid_direction: str | None  # "low" or "high"
     range_state: str
+    # "high"/"low" when the reading is pinned at the meter's limit (true value
+    # is at least/at most mgdl); rate_is_minimum then means the rate is only a
+    # lower bound on the real speed of change.
+    capped: str | None = None
+    rate_is_minimum: bool = False
 
 
 def _thresholds(options: dict) -> dict[str, float]:
@@ -55,19 +60,27 @@ def _thresholds(options: dict) -> dict[str, float]:
     }
 
 
-def _compute_rate(snapshot: GlucoseSnapshot) -> float | None:
-    """mg/dL per minute, from the two most recent readings."""
+def _compute_rate(snapshot: GlucoseSnapshot) -> tuple[float | None, bool]:
+    """(mg/dL per minute, is_lower_bound), from the two most recent readings.
+
+    A reading pinned at the meter's limit isn't an exact value, so any rate
+    touching one is only a lower bound; two readings pinned on the same side
+    tell us nothing about the rate at all.
+    """
     points = sorted(snapshot.history, key=lambda r: r.timestamp)
     if snapshot.current is not None:
         points = [p for p in points if p.timestamp != snapshot.current.timestamp]
         points.append(snapshot.current)
     if len(points) < 2:
-        return None
+        return None, False
     newer, older = points[-1], points[-2]
     delta_minutes = (newer.timestamp - older.timestamp).total_seconds() / 60
     if delta_minutes <= 0:
-        return None
-    return (newer.mgdl - older.mgdl) / delta_minutes
+        return None, False
+    if newer.capped and newer.capped == older.capped:
+        return None, False
+    rate = (newer.mgdl - older.mgdl) / delta_minutes
+    return rate, bool(newer.capped or older.capped)
 
 
 def _range_state(mgdl: float, thresholds: dict[str, float]) -> str:
@@ -101,7 +114,7 @@ def evaluate(snapshot: GlucoseSnapshot, options: dict, now: datetime | None = No
     age_minutes = (now - snapshot.current.timestamp).total_seconds() / 60
     is_stale = age_minutes > thresholds["stale_minutes"]
 
-    rate = _compute_rate(snapshot)
+    rate, rate_is_minimum = _compute_rate(snapshot)
     is_rapid = rate is not None and abs(rate) >= thresholds["rapid_rate"]
     direction = None
     if is_rapid:
@@ -116,4 +129,6 @@ def evaluate(snapshot: GlucoseSnapshot, options: dict, now: datetime | None = No
         is_rapid_change=is_rapid,
         rapid_direction=direction,
         range_state=_range_state(snapshot.current.mgdl, thresholds),
+        capped=snapshot.current.capped,
+        rate_is_minimum=rate_is_minimum,
     )

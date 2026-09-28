@@ -66,6 +66,11 @@ function relativeTime(isoString) {
 
 const MIN_GAP_MS = 10 * 60 * 1000;
 
+// The meter can't read past its measuring range (Libre 3: 40-400 mg/dL), so a
+// value at the limit means "at least"/"at most", not an exact number.
+const CAP_HIGH = 400;
+const CAP_LOW = 40;
+
 // Typical spacing between consecutive readings (median), so the gap threshold
 // adapts to whatever resolution the API returns.
 function medianSpacingMs(times) {
@@ -315,7 +320,16 @@ class BauerGlucoseCard extends HTMLElement {
     this._card.querySelector(".updated").textContent = relativeTime(attrs.timestamp);
 
     const valueEl = this._card.querySelector(".value");
-    valueEl.textContent = value === "unknown" || value === "unavailable" ? "--" : value;
+    const capped = isStale ? null : attrs.capped || null;
+    if (value === "unknown" || value === "unavailable") {
+      valueEl.textContent = "--";
+    } else if (capped === "high") {
+      valueEl.textContent = `${Math.round(Number(value))}+`;
+    } else if (capped === "low") {
+      valueEl.textContent = `≤${Math.round(Number(value))}`;
+    } else {
+      valueEl.textContent = value;
+    }
     valueEl.style.color = color;
 
     this._card.querySelector(".trend").textContent = trendGlyph(trend);
@@ -326,6 +340,11 @@ class BauerGlucoseCard extends HTMLElement {
       badges.appendChild(this._badge("Check insulin now", "#c0392b"));
     } else if (rangeState === "low" || rangeState === "high") {
       badges.appendChild(this._badge(rangeState === "low" ? "Low" : "High", "#d68910"));
+    }
+    if (capped) {
+      badges.appendChild(
+        this._badge(capped === "high" ? "Above meter range: real value unknown" : "Below meter range: real value unknown", "#b45309")
+      );
     }
     if (isRapid) {
       const dir = attrs.direction === "low" ? "Dropping fast" : "Rising fast";
@@ -403,6 +422,24 @@ class BauerGlucoseCard extends HTMLElement {
       ctx.fillStyle = rangeColor(rangeForValue(p.v, th));
       const top = y(p.v);
       ctx.fillRect(x(p.t) - barW / 2, top, barW, Math.max(baseline - top, 1));
+      // Pinned at the meter's limit: mark the bar as "at least"/"at most"
+      if (p.v >= CAP_HIGH || p.v <= CAP_LOW) {
+        const high = p.v >= CAP_HIGH;
+        const cx = x(p.t);
+        const w = Math.max(barW, 6) / 2;
+        ctx.beginPath();
+        if (high) {
+          ctx.moveTo(cx - w, top - 1);
+          ctx.lineTo(cx + w, top - 1);
+          ctx.lineTo(cx, top - 1 - w * 1.4);
+        } else {
+          ctx.moveTo(cx - w, top + 1);
+          ctx.lineTo(cx + w, top + 1);
+          ctx.lineTo(cx, top + 1 + w * 1.4);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
     });
 
     // Say so when the most recent stretch has no readings
