@@ -31,11 +31,12 @@ with your veterinarian.
 - **`bauer_glucose_urgent_range`** / **`bauer_glucose_rapid_change`** —
   Home Assistant events you can automate on. An included blueprint wires
   these to a TTS announcement on your speakers (e.g. Google Nest) and an
-  optional mobile push.
+  optional mobile push. Neither event fires while the reading is stale.
 - **`bauer-glucose-card`** — a Lovelace tile: big colored number (green in
-  range, amber near the edges, red urgent), trend arrow, badges, an inline
-  graph of recent readings with insulin-dose markers on it, and buttons to
-  log a new dose right from the tile.
+  range, amber near the edges, red urgent), trend arrow, badges, a bar
+  graph of recent readings (one bar per reading, colored by range, so a
+  missed reading is a visible gap) with insulin-dose markers on it, and
+  buttons to log a new dose right from the tile.
 - **`sensor.<name>_last_insulin_dose`** — last logged dose (units), with the
   full recent dose log (type, units, timestamp, note) as an attribute.
   Persisted to disk independently of HA's recorder, so it isn't subject to

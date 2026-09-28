@@ -143,6 +143,12 @@ class BauerGlucoseCoordinator(DataUpdateCoordinator[GlucoseSnapshot]):
         status = self.status
         if status is None or status.timestamp is None:
             return
+        if status.is_stale:
+            # An old reading isn't a current emergency (sensor off, link down,
+            # or a restart replaying the last cached value). Edge-tracking
+            # state is deliberately left untouched so an episode that was
+            # already announced isn't re-announced as "new" once data resumes.
+            return
         now = status.timestamp
 
         if status.is_rapid_change:

@@ -76,20 +76,12 @@ function medianSpacingMs(times) {
   return deltas[Math.floor(deltas.length / 2)];
 }
 
-// Split time-sorted points into runs with no missing-reading gap inside them,
-// so a missed stretch is drawn as a break rather than a straight/flat line.
-function splitSegments(points, gapMs) {
-  const segments = [];
-  let current = [];
-  points.forEach((p, i) => {
-    if (i > 0 && p.t - points[i - 1].t > gapMs) {
-      segments.push(current);
-      current = [];
-    }
-    current.push(p);
-  });
-  if (current.length) segments.push(current);
-  return segments;
+function rangeForValue(v, th) {
+  if (v <= th.urgent_low) return "urgent_low";
+  if (v <= th.low) return "low";
+  if (v >= th.urgent_high) return "urgent_high";
+  if (v >= th.high) return "high";
+  return "in_range";
 }
 
 function guessDoseEntity(glucoseEntity) {
@@ -347,7 +339,7 @@ class BauerGlucoseCard extends HTMLElement {
     const doses = doseState?.attributes?.doses || [];
 
     this._renderDoseStatus();
-    this._drawGraph(attrs.history || [], doses, color);
+    this._drawGraph(attrs.history || [], doses);
   }
 
   _badge(text, bg) {
@@ -358,13 +350,13 @@ class BauerGlucoseCard extends HTMLElement {
     return el;
   }
 
-  _drawGraph(history, doses, accent) {
+  _drawGraph(history, doses) {
     const canvas = this._card.querySelector("canvas");
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const width = Math.max(rect.width, 200);
     const height = 110;
-    const topMargin = 16; // room for dose labels above the line
+    const topMargin = 16; // room for dose labels above the bars
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     const ctx = canvas.getContext("2d");
@@ -380,7 +372,7 @@ class BauerGlucoseCard extends HTMLElement {
       .map((p) => ({ t: new Date(p.t).getTime(), v: p.mgdl }))
       .filter((p) => p.t >= cutoff)
       .sort((a, b) => a.t - b.t);
-    if (points.length < 2) return;
+    if (!points.length) return;
 
     const values = points.map((p) => p.v);
     const th = this._thresholds;
@@ -391,82 +383,60 @@ class BauerGlucoseCard extends HTMLElement {
     // land on the graph.
     const minT = cutoff;
     const maxT = now;
-    const gapMs = Math.max(2.5 * medianSpacingMs(points.map((p) => p.t)), MIN_GAP_MS);
+    const spacing = medianSpacingMs(points.map((p) => p.t));
+    const gapMs = Math.max(2.5 * spacing, MIN_GAP_MS);
 
     const x = (t) => ((t - minT) / Math.max(maxT - minT, 1)) * (width - 4) + 2;
     const y = (v) =>
       topMargin + (height - topMargin) - ((v - minV) / Math.max(maxV - minV, 1)) * (height - topMargin - 8) - 4;
+    const baseline = y(minV);
 
     // Target-range band
     ctx.fillStyle = "rgba(47, 158, 94, 0.12)";
     ctx.fillRect(0, y(th.high), width, y(th.low) - y(th.high));
 
-    // Insulin dose markers, within the same time window
-    const doseMarkers = (doses || [])
-      .map((d) => ({ t: new Date(d.t).getTime(), type: d.type, units: d.units }))
-      .filter((d) => d.t >= minT && d.t <= maxT);
-    doseMarkers.forEach((d) => {
-      const px = x(d.t);
-      const markerColor = DOSE_COLORS[d.type] || "#999";
-      ctx.beginPath();
-      ctx.setLineDash([3, 2]);
-      ctx.strokeStyle = markerColor;
-      ctx.lineWidth = 1.5;
-      ctx.moveTo(px, topMargin);
-      ctx.lineTo(px, height - 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = markerColor;
-      ctx.font = "9px sans-serif";
-      ctx.textAlign = "center";
-      const label = `${DOSE_LABEL[d.type] || "?"}${d.units}`;
-      ctx.fillText(label, px, topMargin - 4);
+    // One bar per reading, colored by range. A missed reading is simply a
+    // missing bar, so gaps can't be mistaken for a steady value.
+    const slot = spacing > 0 ? (spacing / Math.max(maxT - minT, 1)) * (width - 4) : 6;
+    const barW = Math.min(Math.max(slot * 0.75, 2), 14);
+    points.forEach((p) => {
+      ctx.fillStyle = rangeColor(rangeForValue(p.v, th));
+      const top = y(p.v);
+      ctx.fillRect(x(p.t) - barW / 2, top, barW, Math.max(baseline - top, 1));
     });
 
-    // Shade stretches with no reading (between readings, and up to now)
-    ctx.fillStyle = "rgba(128, 128, 128, 0.15)";
-    for (let i = 1; i < points.length; i++) {
-      if (points[i].t - points[i - 1].t > gapMs) {
-        ctx.fillRect(x(points[i - 1].t), topMargin, x(points[i].t) - x(points[i - 1].t), height - topMargin);
-      }
-    }
+    // Say so when the most recent stretch has no readings
     const last = points[points.length - 1];
-    const trailingGap = now - last.t > gapMs;
-    if (trailingGap) {
-      ctx.fillRect(x(last.t), topMargin, x(now) - x(last.t), height - topMargin);
+    if (now - last.t > gapMs) {
+      ctx.fillStyle = "rgba(128, 128, 128, 0.15)";
+      ctx.fillRect(x(last.t) + barW / 2, topMargin, x(now) - x(last.t) - barW / 2, height - topMargin);
       ctx.fillStyle = "#6b7280";
       ctx.font = "10px sans-serif";
       ctx.textAlign = "right";
       ctx.fillText("no reading", width - 6, topMargin + (height - topMargin) / 2);
     }
 
-    // Glucose line, broken wherever readings are missing
-    const lineColor = accent || COLORS.in_range;
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 2;
-    ctx.lineJoin = "round";
-    splitSegments(points, gapMs).forEach((segment) => {
-      if (segment.length === 1) {
+    // Insulin dose markers, within the same time window
+    (doses || [])
+      .map((d) => ({ t: new Date(d.t).getTime(), type: d.type, units: d.units }))
+      .filter((d) => d.t >= minT && d.t <= maxT)
+      .forEach((d) => {
+        const px = x(d.t);
+        const markerColor = DOSE_COLORS[d.type] || "#999";
         ctx.beginPath();
-        ctx.arc(x(segment[0].t), y(segment[0].v), 2, 0, Math.PI * 2);
-        ctx.fillStyle = lineColor;
-        ctx.fill();
-        return;
-      }
-      ctx.beginPath();
-      segment.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(x(p.t), y(p.v));
-        else ctx.lineTo(x(p.t), y(p.v));
-      });
-      ctx.stroke();
-    });
+        ctx.setLineDash([3, 2]);
+        ctx.strokeStyle = markerColor;
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(px, topMargin);
+        ctx.lineTo(px, height - 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
-    // Latest reading marker
-    ctx.beginPath();
-    ctx.arc(x(last.t), y(last.v), 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = lineColor;
-    ctx.fill();
+        ctx.fillStyle = markerColor;
+        ctx.font = "9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`${DOSE_LABEL[d.type] || "?"}${d.units}`, px, topMargin - 4);
+      });
   }
 }
 
