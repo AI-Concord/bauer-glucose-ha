@@ -15,8 +15,13 @@ with your veterinarian.
 - **`sensor.<name>_glucose`** — current mg/dL reading, with trend arrow,
   rate of change, and a rolling history array (used by the card's graph;
   Home Assistant's own recorder also gives you long-term history/statistics
-  on this entity automatically, no separate database needed).
-- **`sensor.<name>_glucose_rate`** — rate of change in mg/dL/min.
+  on this entity automatically, no separate database needed). When the
+  reading goes stale (see `stale_reading`) the state becomes `unknown`
+  instead of repeating the last value, so history graphs show a gap rather
+  than a flat line; the card shades the missing stretch, and any readings the
+  meter backfills later fill in on the card's graph.
+- **`sensor.<name>_glucose_rate`** — rate of change in mg/dL/min (also
+  `unknown` while stale).
 - **`binary_sensor.<name>_rapid_change`** — on when glucose is moving faster
   than your configured rate threshold, in either direction.
 - **`binary_sensor.<name>_out_of_range`** / **`..._urgent_range`** — on when

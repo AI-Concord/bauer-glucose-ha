@@ -38,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    name = entry.data.get(CONF_PATIENT_NAME, "Bauer")
+    name = entry.options.get(CONF_PATIENT_NAME, entry.data.get(CONF_PATIENT_NAME, "Bauer"))
     return DeviceInfo(
         identifiers={(DOMAIN, entry.data[CONF_PATIENT_ID])},
         name=f"{name}'s Glucose Monitor",
@@ -63,8 +63,14 @@ class GlucoseSensor(CoordinatorEntity[BauerGlucoseCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> float | None:
+        # A stale reading is reported as "no reading" (state unknown) rather
+        # than repeating the last value, so recorder/history graphs show a gap
+        # instead of a flat line. Attributes (incl. the API history, which
+        # backfills once the meter catches up) stay available.
         status = self.coordinator.status
-        return status.mgdl if status else None
+        if status is None or status.is_stale:
+            return None
+        return status.mgdl
 
     @property
     def icon(self) -> str:
@@ -118,7 +124,7 @@ class GlucoseRateSensor(CoordinatorEntity[BauerGlucoseCoordinator], SensorEntity
     @property
     def native_value(self) -> float | None:
         status = self.coordinator.status
-        if status is None or status.rate_mgdl_per_min is None:
+        if status is None or status.is_stale or status.rate_mgdl_per_min is None:
             return None
         return round(status.rate_mgdl_per_min, 2)
 

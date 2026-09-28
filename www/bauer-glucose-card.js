@@ -64,6 +64,34 @@ function relativeTime(isoString) {
   return `${hrs}h ${diffMin % 60}m ago`;
 }
 
+const MIN_GAP_MS = 10 * 60 * 1000;
+
+// Typical spacing between consecutive readings (median), so the gap threshold
+// adapts to whatever resolution the API returns.
+function medianSpacingMs(times) {
+  const deltas = [];
+  for (let i = 1; i < times.length; i++) deltas.push(times[i] - times[i - 1]);
+  if (!deltas.length) return 0;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)];
+}
+
+// Split time-sorted points into runs with no missing-reading gap inside them,
+// so a missed stretch is drawn as a break rather than a straight/flat line.
+function splitSegments(points, gapMs) {
+  const segments = [];
+  let current = [];
+  points.forEach((p, i) => {
+    if (i > 0 && p.t - points[i - 1].t > gapMs) {
+      segments.push(current);
+      current = [];
+    }
+    current.push(p);
+  });
+  if (current.length) segments.push(current);
+  return segments;
+}
+
 function guessDoseEntity(glucoseEntity) {
   if (!glucoseEntity) return null;
   if (glucoseEntity.includes("_glucose")) {
@@ -139,7 +167,7 @@ class BauerGlucoseCard extends HTMLElement {
       .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
       .empty { color: var(--secondary-text-color); font-size: 0.85rem; padding: 8px 0; }
       .dose-log {
-        display: flex; align-items: center; gap: 8px;
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         border-top: 1px solid var(--divider-color, #e0e0e0);
         padding-top: 10px; cursor: default;
       }
@@ -155,7 +183,14 @@ class BauerGlucoseCard extends HTMLElement {
       .dose-log button.long { background: ${DOSE_COLORS.long}; }
       .dose-log button.short { background: ${DOSE_COLORS.short}; }
       .dose-log button:active { filter: brightness(0.9); }
-      .dose-status { font-size: 0.75rem; color: var(--secondary-text-color); margin-left: auto; }
+      .dose-log button:disabled { opacity: 0.6; cursor: default; }
+      .dose-status {
+        flex-basis: 100%; font-size: 0.8rem; min-height: 1.2em;
+        color: var(--secondary-text-color);
+      }
+      .dose-status.ok { color: #2f9e5e; font-weight: 700; }
+      .dose-status.error { color: #c0392b; font-weight: 700; }
+      .dose-status.pending { font-style: italic; }
     `;
     this._card = document.createElement("ha-card");
     this._card.innerHTML = `
@@ -198,33 +233,67 @@ class BauerGlucoseCard extends HTMLElement {
     this.dispatchEvent(event);
   }
 
-  async _logDose(insulinType) {
+  // Transient message (pending/confirmation/error) shown in the dose row;
+  // once it expires the row falls back to the persistent "last dose" line.
+  _flashDoseStatus(text, kind, ms) {
+    this._doseFlash = { text, kind, until: ms ? Date.now() + ms : Infinity };
+    this._renderDoseStatus();
+    clearTimeout(this._doseFlashTimer);
+    if (ms) {
+      this._doseFlashTimer = setTimeout(() => {
+        this._doseFlash = null;
+        this._renderDoseStatus();
+      }, ms);
+    }
+  }
+
+  _renderDoseStatus() {
     const statusEl = this._card.querySelector(".dose-status");
+    const flash = this._doseFlash;
+    if (flash && Date.now() < flash.until) {
+      statusEl.textContent = flash.text;
+      statusEl.className = `dose-status ${flash.kind}`;
+      return;
+    }
+    const doseState = this._doseEntityId ? this._hass?.states[this._doseEntityId] : null;
+    const attrs = doseState?.attributes || {};
+    const hasDose = doseState && doseState.state !== "unknown" && doseState.state !== "unavailable";
+    statusEl.className = "dose-status";
+    if (!hasDose) {
+      statusEl.textContent = "No insulin logged yet";
+      return;
+    }
+    const dose = [`${doseState.state}u`, attrs.insulin_type && `${attrs.insulin_type}-acting`].filter(Boolean).join(" ");
+    statusEl.textContent = `Last dose: ${dose} · ${relativeTime(attrs.timestamp)}`;
+  }
+
+  async _logDose(insulinType) {
     if (!this._doseEntityId || !this._hass.states[this._doseEntityId]) {
-      statusEl.textContent = "No dose sensor configured";
+      this._flashDoseStatus("No dose sensor configured", "error", 6000);
       return;
     }
     const unitsInput = this._card.querySelector(".dose-units");
     const units = parseFloat(unitsInput.value);
     if (!Number.isFinite(units) || units <= 0) {
-      statusEl.textContent = "Enter units first";
+      this._flashDoseStatus("Enter units first", "error", 4000);
       return;
     }
+    const buttons = this._card.querySelectorAll(".dose-log button");
+    buttons.forEach((b) => (b.disabled = true));
+    this._flashDoseStatus(`Logging ${units}u ${insulinType}…`, "pending", 0);
     try {
       await this._hass.callService("bauer_glucose", "log_dose", {
         entity_id: this._doseEntityId,
         insulin_type: insulinType,
         units,
       });
-      statusEl.textContent = `Logged ${units}u ${insulinType} ✓`;
+      const at = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      this._flashDoseStatus(`✓ Logged ${units}u ${insulinType}-acting at ${at}`, "ok", 8000);
     } catch (err) {
-      statusEl.textContent = "Failed to log dose";
+      this._flashDoseStatus(`✗ Failed to log dose: ${err?.message || "unknown error"}`, "error", 10000);
+    } finally {
+      buttons.forEach((b) => (b.disabled = false));
     }
-    setTimeout(() => {
-      if (statusEl.textContent.startsWith("Logged") || statusEl.textContent === "Failed to log dose") {
-        statusEl.textContent = "";
-      }
-    }, 3000);
   }
 
   _renderMissing() {
@@ -240,10 +309,12 @@ class BauerGlucoseCard extends HTMLElement {
   _render(stateObj) {
     const attrs = stateObj.attributes || {};
     const name = this._config.name || attrs.friendly_name || this._config.entity;
-    const rangeState = attrs.range_state || "unknown";
-    const trend = attrs.trend || "unknown";
     const isStale = !!attrs.is_stale;
-    const isRapid = !!attrs.is_rapid_change;
+    // A stale reading is "no reading": don't color it or raise range/rapid
+    // badges off an old value.
+    const rangeState = isStale ? "unknown" : attrs.range_state || "unknown";
+    const trend = isStale ? "unknown" : attrs.trend || "unknown";
+    const isRapid = !isStale && !!attrs.is_rapid_change;
     const value = stateObj.state;
     const color = rangeColor(rangeState);
 
@@ -269,13 +340,14 @@ class BauerGlucoseCard extends HTMLElement {
       badges.appendChild(this._badge(dir, "#a04ec9"));
     }
     if (isStale) {
-      badges.appendChild(this._badge("No recent data", "#6b7280"));
+      badges.appendChild(this._badge("No reading available", "#6b7280"));
     }
 
     const doseState = this._doseEntityId ? this._hass.states[this._doseEntityId] : null;
     const doses = doseState?.attributes?.doses || [];
 
-    this._drawGraph(attrs.history || [], doses);
+    this._renderDoseStatus();
+    this._drawGraph(attrs.history || [], doses, color);
   }
 
   _badge(text, bg) {
@@ -286,7 +358,7 @@ class BauerGlucoseCard extends HTMLElement {
     return el;
   }
 
-  _drawGraph(history, doses) {
+  _drawGraph(history, doses, accent) {
     const canvas = this._card.querySelector("canvas");
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -302,7 +374,8 @@ class BauerGlucoseCard extends HTMLElement {
     if (!history.length) return;
 
     const hours = this._config.hours || 3;
-    const cutoff = Date.now() - hours * 3600 * 1000;
+    const now = Date.now();
+    const cutoff = now - hours * 3600 * 1000;
     const points = history
       .map((p) => ({ t: new Date(p.t).getTime(), v: p.mgdl }))
       .filter((p) => p.t >= cutoff)
@@ -313,8 +386,12 @@ class BauerGlucoseCard extends HTMLElement {
     const th = this._thresholds;
     const minV = Math.min(...values, th.urgent_low) - 10;
     const maxV = Math.max(...values, th.urgent_high) + 10;
-    const minT = points[0].t;
-    const maxT = points[points.length - 1].t;
+    // The time axis runs to "now" (not the last reading), so missing recent
+    // data shows as empty space and doses logged since the last reading still
+    // land on the graph.
+    const minT = cutoff;
+    const maxT = now;
+    const gapMs = Math.max(2.5 * medianSpacingMs(points.map((p) => p.t)), MIN_GAP_MS);
 
     const x = (t) => ((t - minT) / Math.max(maxT - minT, 1)) * (width - 4) + 2;
     const y = (v) =>
@@ -347,24 +424,48 @@ class BauerGlucoseCard extends HTMLElement {
       ctx.fillText(label, px, topMargin - 4);
     });
 
-    // Glucose line
-    ctx.beginPath();
-    points.forEach((p, i) => {
-      const px = x(p.t);
-      const py = y(p.v);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    });
-    ctx.strokeStyle = "var(--card-accent, #2f9e5e)";
+    // Shade stretches with no reading (between readings, and up to now)
+    ctx.fillStyle = "rgba(128, 128, 128, 0.15)";
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].t - points[i - 1].t > gapMs) {
+        ctx.fillRect(x(points[i - 1].t), topMargin, x(points[i].t) - x(points[i - 1].t), height - topMargin);
+      }
+    }
+    const last = points[points.length - 1];
+    const trailingGap = now - last.t > gapMs;
+    if (trailingGap) {
+      ctx.fillRect(x(last.t), topMargin, x(now) - x(last.t), height - topMargin);
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("no reading", width - 6, topMargin + (height - topMargin) / 2);
+    }
+
+    // Glucose line, broken wherever readings are missing
+    const lineColor = accent || COLORS.in_range;
+    ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2;
     ctx.lineJoin = "round";
-    ctx.stroke();
+    splitSegments(points, gapMs).forEach((segment) => {
+      if (segment.length === 1) {
+        ctx.beginPath();
+        ctx.arc(x(segment[0].t), y(segment[0].v), 2, 0, Math.PI * 2);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+        return;
+      }
+      ctx.beginPath();
+      segment.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(x(p.t), y(p.v));
+        else ctx.lineTo(x(p.t), y(p.v));
+      });
+      ctx.stroke();
+    });
 
-    // Latest point marker
-    const last = points[points.length - 1];
+    // Latest reading marker
     ctx.beginPath();
     ctx.arc(x(last.t), y(last.v), 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fillStyle = lineColor;
     ctx.fill();
   }
 }
